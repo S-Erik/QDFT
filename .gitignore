@@ -209,5 +209,6 @@ cython_debug/
 
 *.clean
 *.dat
+!H*.dat
 
 examples/circuit
