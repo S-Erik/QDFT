@@ -2,6 +2,7 @@ import sys, os
 import numpy as np
 import math
 import scipy
+import matplotlib.pyplot as plt
 import QDFT
 # importing Qiskit
 from qiskit import Aer, transpile
@@ -22,6 +23,8 @@ import psi4
 psi4.set_memory('100 GB')
 
 working_directory = os.getenv('QDFT_DIR')
+# TODO: Remove next line
+working_directory = os.path.join(os.getenv("HOME"), "QuantiCoM", "QDFT")
 
 #===========================================================#
 #=============== Initialization by the user ================#
@@ -86,12 +89,14 @@ basis          = "sto-3g"
 run_fci        = True
 
 # System:
-n_qubits       = 2
+n_qubits       = 3
 n_orbs         = 2**n_qubits # number of hydrogens
 n_elec         = n_orbs
 n_occ          = n_elec//2
 #interdist_list = [0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0]
 interdist_list = [1.2]
+
+geom_choice = "linear"
 
 # SA weights:
 weights_choice = ["equi","decreasing"][1]
@@ -128,12 +133,17 @@ circuit_drawer(circuits[0].decompose(), scale=None, filename="circuit", style=No
 #========================================================================#
 #============= START THE ALGORITHM FOR DIFFERENT U VALUES ===============#
 #========================================================================#
+
+os.makedirs(os.path.join(working_directory, "examples", "results"), exist_ok=True)
 for R in interdist_list:
 
     psi4.core.clean()
     # Define the geometry
-    psi4.core.set_output_file(working_directory + "examples/results/H{}_R{}_{}_{}_Psi4.dat".format(n_orbs,R,basis,functional),True)
-    psi4.geometry(QDFT.Hchain_geometry("linear",n_orbs,R))
+    psi4.core.set_output_file(os.path.join(working_directory, "examples", "results",
+                                           "H{}_R{}_{}_{}_Psi4.dat".format(n_orbs,R,basis,functional)),True)
+    geometry_str = QDFT.Hchain_geometry(geom_choice,n_orbs,R)
+    print(f"H chain geometry: {geometry_str}")
+    psi4.geometry(geometry_str)
 
     psi4.set_options({'basis': basis, 'scf_type': 'pk'})#, 'print': 5, 'debug': 1})
     dft_e, dft_wfn = psi4.energy(functional, return_wfn=True)
@@ -170,6 +180,13 @@ for R in interdist_list:
     SAD.compute_guess()
     D_AO = SAD.Da()
 
+    # plt.figure()
+    # plt.imshow(D_AO, cmap="coolwarm")
+    # plt.colorbar()
+    # plt.savefig(
+    #     os.path.join(working_directory, "examples", "results", "init_density.png")
+    # )
+
     if run_fci:
         psi4.set_options({'ci_maxiter': 100})
         fci_e = psi4.energy('fci', return_wfn=False)
@@ -181,7 +198,8 @@ for R in interdist_list:
     mints = psi4.core.MintsHelper(dft_wfn.basisset())
     I = np.asarray(mints.ao_eri())
 
-    output_file = working_directory + "examples/results/H{}_R{}_{}_{}_nshots{}_layer{}_maxiter{}_resampling{}_slopeSPSA{}_slopeSCF{}_{}.dat".format(n_orbs,R,basis,opt_method,nshots,n_blocks,opt_maxiter,resampling,slope_SPSA,slope_SCF,simulation)
+    output_file = os.path.join(working_directory, "examples", "results",
+                               "H{}_R{}_{}_{}_nshots{}_layer{}_maxiter{}_resampling{}_slopeSPSA{}_slopeSCF{}_{}.dat".format(n_orbs,R,basis,opt_method,nshots,n_blocks,opt_maxiter,resampling,slope_SPSA,slope_SCF,simulation))
 
     print("*"*50)
     print("*" + " "*18 + "R = {:8.3f}".format(R) + " "*18 + "*")
@@ -265,6 +283,8 @@ for R in interdist_list:
         eigvals = result.eigenvalues
         eigvecs = result.eigenstates.to_matrix().T
 
+        print(f"NumPy eigenvalues: {sorted(eigvals)}")
+
         with open(output_file,'a') as f:
          f.write("varepsilon exact: {}".format(dft_wfn.epsilon_a().np[:]) + "\n")
          f.write("varepsilon from diag: {}".format(eigvals[:n_occ]) + "\n")
@@ -319,6 +339,14 @@ for R in interdist_list:
            energies = [sampled_expectation_value(bounds[state],H_qubit,backend,simulation,nshots=nshots) for state in range(n_occ)]
         else:
            energies = [np.real((StateFn(H_qubit, is_measurement=True) @ StateFn(bounds[state])).eval()) for state in range(n_occ)]
+           print(f"VQE energies: {sorted(energies)}")
+
+        plt.figure()
+        plt.hlines(eigvals, 0, 1, colors="black")
+        plt.hlines(energies, 0.1, 0.9, colors="blue")
+        plt.savefig(
+            os.path.join(working_directory, "examples", "results", f"energies_iter{SCF_ITER}.png")
+        )
 
         with open(output_file,'a') as f: f.write("SA ENERGY: {}".format(E_SA) + "\n")
 

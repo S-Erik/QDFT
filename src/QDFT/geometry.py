@@ -5,6 +5,9 @@ def Hchain_geometry(choice,n_hydrogens,R,r_H2=0.7):
       for d in range(n_hydrogens//2):
         string_geo += "H 0. 0. {}\n".format(- (R/2. + d*R))
         string_geo += "H 0. 0. {}\n".format(+ (R/2. + d*R))
+    elif choice == "erik":
+      for d in range(n_hydrogens):
+        string_geo += f"H 0. 0. {d*R}\n"
     elif choice == "linear_broken":
       delta_R = np.random.rand(n_hydrogens)/100. # array of random values between [0,1/100)
       for d in range(n_hydrogens//2):
